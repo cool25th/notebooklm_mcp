@@ -1,0 +1,14 @@
+{
+    "mcpServers": {
+        "notebooklm-mcp": {
+            "command": "/path/to/notebooklm_mcp/.venv/bin/python",
+            "args": [
+                "-m",
+                "notebooklm_mcp.server"
+            ],
+            "env": {
+                "PLAYWRIGHT_BROWSERS_PATH": "/path/to/notebooklm_mcp/.browsers"
+            }
+        }
+    }
+}

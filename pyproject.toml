@@ -1,0 +1,33 @@
+[project]
+name = "antigravity-notebooklm-mcp"
+version = "0.1.0"
+description = "NotebookLM MCP Server for Antigravity IDE - Integrates NotebookLM's RAG capabilities"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=0.4.0",
+    "httpx>=0.27.0",
+    "patchright>=0.5.0",
+]
+
+[project.scripts]
+notebooklm-mcp = "notebooklm_mcp.server:main"
+notebooklm-mcp-auth = "notebooklm_mcp.auth:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/notebooklm_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]

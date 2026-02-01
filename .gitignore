@@ -1,0 +1,39 @@
+# NotebookLM MCP
+
+## Dependencies
+.venv/
+.browsers/
+.tmp/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+## Authentication
+.notebooklm-mcp/
+auth.json
+cookies.json
+
+## IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log
+logs/
+
+## Environment
+.env
+.env.local
+
+## require
+.require/
+prd.md
