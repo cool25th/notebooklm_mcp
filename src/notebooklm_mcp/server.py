@@ -46,7 +46,23 @@ async def notebook_list() -> dict[str, Any]:
         A dictionary containing the list of notebooks with their IDs, names, and metadata.
     """
     client = get_client()
-    return await client.list_notebooks()
+    notebooks = await asyncio.to_thread(client.list_notebooks)
+    return {
+        "notebooks": [
+            {
+                "id": nb.id,
+                "title": nb.title,
+                "source_count": nb.source_count,
+                "url": nb.url,
+                "is_owned": nb.is_owned,
+                "is_shared": nb.is_shared,
+                "created_at": nb.created_at,
+                "modified_at": nb.modified_at,
+            }
+            for nb in notebooks
+        ],
+        "count": len(notebooks),
+    }
 
 
 @mcp.tool()
@@ -61,7 +77,7 @@ async def notebook_create(name: str, description: str = "") -> dict[str, Any]:
         The created notebook details including its ID.
     """
     client = get_client()
-    return await client.create_notebook(name, description)
+    return await asyncio.to_thread(client.create_notebook, name, description)
 
 
 @mcp.tool()
@@ -75,7 +91,7 @@ async def notebook_get(notebook_id: str) -> dict[str, Any]:
         Notebook details including sources and metadata.
     """
     client = get_client()
-    return await client.get_notebook(notebook_id)
+    return await asyncio.to_thread(client.get_notebook, notebook_id)
 
 
 @mcp.tool()
@@ -89,7 +105,7 @@ async def notebook_describe(notebook_id: str) -> dict[str, Any]:
         AI summary and suggested conversation topics.
     """
     client = get_client()
-    return await client.describe_notebook(notebook_id)
+    return await asyncio.to_thread(client.get_notebook_summary, notebook_id)
 
 
 @mcp.tool()
@@ -104,7 +120,7 @@ async def notebook_rename(notebook_id: str, new_name: str) -> dict[str, Any]:
         Updated notebook details.
     """
     client = get_client()
-    return await client.rename_notebook(notebook_id, new_name)
+    return await asyncio.to_thread(client.rename_notebook, notebook_id, new_name)
 
 
 @mcp.tool()
@@ -121,7 +137,7 @@ async def notebook_delete(notebook_id: str, confirm: bool = False) -> dict[str, 
     if not confirm:
         return {"error": "Deletion requires confirm=True"}
     client = get_client()
-    return await client.delete_notebook(notebook_id)
+    return await asyncio.to_thread(client.delete_notebook, notebook_id)
 
 
 # =============================================================================
@@ -155,7 +171,8 @@ async def source_add(
         Source details and processing status.
     """
     client = get_client()
-    return await client.add_source(
+    return await asyncio.to_thread(
+        client.add_source,
         notebook_id=notebook_id,
         source_type=source_type,
         url=url,
@@ -178,7 +195,7 @@ async def source_list(notebook_id: str) -> dict[str, Any]:
         List of sources with metadata and freshness information.
     """
     client = get_client()
-    return await client.list_sources(notebook_id)
+    return await asyncio.to_thread(client.list_sources, notebook_id)
 
 
 @mcp.tool()
