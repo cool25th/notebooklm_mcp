@@ -1,233 +1,115 @@
-"""NotebookLM MCP Authentication Module.
+"""Authentication helper for NotebookLM MCP.
 
-This module provides browser-based authentication for NotebookLM using Patchright
-(a Playwright fork). It extracts cookies and CSRF tokens from the browser session.
+Provides token management and validation for NotebookLM API access.
 """
 
-import asyncio
 import json
-import logging
-import os
-import sys
+import re
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
 
-# Configuration paths
-CONFIG_DIR = Path.home() / ".notebooklm-mcp"
-AUTH_FILE = CONFIG_DIR / "auth.json"
-CHROME_PROFILE_DIR = CONFIG_DIR / "chrome-profile"
-
-# Set browser path to project-local folder (avoids macOS permission issues)
-PROJECT_DIR = Path(__file__).parent.parent.parent
-BROWSERS_DIR = PROJECT_DIR / ".browsers"
-os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(BROWSERS_DIR))
-
-
-async def authenticate(
-    headless: bool = False,
-    timeout: int = 120,
-    devtools_timeout: int = 10,
-) -> dict:
-    """Authenticate with NotebookLM using browser automation.
+@dataclass
+class AuthTokens:
+    """Authentication tokens for NotebookLM.
     
-    Args:
-        headless: Run browser in headless mode (not recommended for login).
-        timeout: Maximum time to wait for login (seconds).
-        devtools_timeout: Time to wait for DevTools connection (seconds).
-    
-    Returns:
-        Authentication result with status and token info.
+    Only cookies are required. CSRF token and session ID are optional because
+    they can be auto-extracted from the NotebookLM page when needed.
     """
-    try:
-        from patchright.async_api import async_playwright
-    except ImportError:
+    cookies: dict[str, str]
+    csrf_token: str = ""
+    session_id: str = ""
+    extracted_at: float = 0.0
+
+    def to_dict(self) -> dict:
         return {
-            "error": "Patchright not installed. Run: pip install patchright && patchright install chromium"
+            "cookies": self.cookies,
+            "csrf_token": self.csrf_token,
+            "session_id": self.session_id,
+            "extracted_at": self.extracted_at,
         }
-    
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    
-    print("🔐 Starting NotebookLM authentication...")
-    print("   A browser window will open. Please log in with your Google account.")
-    print()
-    
-    async with async_playwright() as p:
-        # Launch browser with persistent context for login persistence
-        browser = await p.chromium.launch_persistent_context(
-            user_data_dir=str(CHROME_PROFILE_DIR),
-            headless=headless,
-            args=[
-                "--disable-blink-features=AutomationControlled",
-            ],
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "AuthTokens":
+        return cls(
+            cookies=data.get("cookies", {}),
+            csrf_token=data.get("csrf_token", ""),
+            session_id=data.get("session_id", ""),
+            extracted_at=data.get("extracted_at", 0),
         )
-        
-        try:
-            page = await browser.new_page()
-            
-            # Navigate to NotebookLM
-            print("📱 Opening NotebookLM...")
-            await page.goto("https://notebooklm.google.com/")
-            
-            # Wait for user to complete login
-            print("⏳ Waiting for login... (you have %d seconds)" % timeout)
-            print("   Complete Google sign-in in the browser window.")
-            print()
-            
-            # Wait for the main app to load (indicates successful login)
-            # Selectors updated 2025-02: button.create-new-button, mat-card.create-new-action-button, Google account link
-            try:
-                await page.wait_for_selector(
-                    'button.create-new-button, mat-card.create-new-action-button, a[aria-label*="Google 계정"], a[aria-label*="Google Account"]',
-                    timeout=timeout * 1000,
-                )
-                print("✅ Login detected!")
-            except Exception:
-                print("❌ Login timeout. Please try again.")
-                return {"error": "Login timeout", "status": "timeout"}
-            
-            # Extract cookies
-            cookies = await browser.cookies()
-            cookie_dict = {c["name"]: c["value"] for c in cookies}
-            
-            # Extract CSRF token from page
-            csrf_token = None
-            session_id = None
-            
-            # Try to extract from page scripts
-            try:
-                scripts = await page.evaluate("""
-                    () => {
-                        const scripts = document.querySelectorAll('script');
-                        for (const script of scripts) {
-                            const content = script.textContent || '';
-                            if (content.includes('WIZ_global_data')) {
-                                return content;
-                            }
-                        }
-                        return null;
-                    }
-                """)
-                
-                if scripts:
-                    # Parse CSRF token from WIZ_global_data
-                    import re
-                    csrf_match = re.search(r'"FdrFJe":"([^"]+)"', scripts)
-                    if csrf_match:
-                        csrf_token = csrf_match.group(1)
-                    
-                    sid_match = re.search(r'"SNlM0e":"([^"]+)"', scripts)
-                    if sid_match:
-                        session_id = sid_match.group(1)
-            except Exception as e:
-                logger.warning("Failed to extract tokens from page: %s", e)
-            
-            # Get email if available
-            email = None
-            try:
-                email_element = await page.query_selector('[data-email], [aria-label*="@"]')
-                if email_element:
-                    email = await email_element.get_attribute("data-email")
-                    if not email:
-                        label = await email_element.get_attribute("aria-label")
-                        if label and "@" in label:
-                            email = label.split()[-1] if "@" in label.split()[-1] else None
-            except Exception:
-                pass
-            
-            # Save authentication data
-            auth_data = {
-                "cookies": cookie_dict,
-                "csrf_token": csrf_token,
-                "session_id": session_id,
-                "email": email,
-                "timestamp": asyncio.get_event_loop().time(),
-            }
-            
-            with open(AUTH_FILE, "w") as f:
-                json.dump(auth_data, f, indent=2)
-            
-            print()
-            print("🎉 SUCCESS! Authentication saved to:", AUTH_FILE)
-            if email:
-                print("   Account:", email)
-            print()
-            print("Next steps:")
-            print("  1. Configure your MCP client (Claude Code, Cursor, etc.)")
-            print("  2. Add: notebooklm-mcp to your MCP servers")
-            print()
-            
-            return {
-                "status": "success",
-                "email": email,
-                "has_csrf_token": bool(csrf_token),
-                "has_session_id": bool(session_id),
-                "cookies_count": len(cookie_dict),
-            }
-            
-        finally:
-            await browser.close()
+
+    def is_expired(self, max_age_hours: float = 168) -> bool:
+        """Check if cookies are older than max_age_hours (default 1 week)."""
+        age_seconds = time.time() - self.extracted_at
+        return age_seconds > (max_age_hours * 3600)
+
+    @property
+    def cookie_header(self) -> str:
+        """Get cookies as a header string."""
+        return "; ".join(f"{k}={v}" for k, v in self.cookies.items())
 
 
-def main():
-    """CLI entry point for authentication."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(
-        description="NotebookLM MCP Authentication Tool",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  notebooklm-mcp-auth              # Normal mode (browser window opens)
-  notebooklm-mcp-auth --headless   # Headless mode (not recommended for first login)
-  notebooklm-mcp-auth --timeout 180  # Extended timeout for slow connections
-        """,
-    )
-    
-    parser.add_argument(
-        "--headless",
-        action="store_true",
-        help="Run browser in headless mode (only works if already logged in)",
-    )
-    parser.add_argument(
-        "--timeout",
-        type=int,
-        default=120,
-        help="Timeout for login in seconds (default: 120)",
-    )
-    parser.add_argument(
-        "--devtools-timeout",
-        type=int,
-        default=10,
-        help="Timeout for DevTools connection (default: 10)",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug logging",
-    )
-    
-    args = parser.parse_args()
-    
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-    else:
-        logging.basicConfig(level=logging.INFO)
-    
-    result = asyncio.run(
-        authenticate(
-            headless=args.headless,
-            timeout=args.timeout,
-            devtools_timeout=args.devtools_timeout,
-        )
-    )
-    
-    if "error" in result:
-        print(f"❌ Error: {result['error']}")
-        sys.exit(1)
-    
-    sys.exit(0)
+# Required cookies for authentication
+REQUIRED_COOKIES = ["SID", "HSID", "SSID", "APISID", "SAPISID"]
 
 
-if __name__ == "__main__":
-    main()
+def get_cache_path() -> Path:
+    """Get the path to the auth cache file."""
+    cache_dir = Path.home() / ".notebooklm-mcp"
+    cache_dir.mkdir(exist_ok=True)
+    return cache_dir / "auth.json"
+
+
+def load_cached_tokens() -> AuthTokens | None:
+    """Load tokens from cache if they exist."""
+    cache_path = get_cache_path()
+    if not cache_path.exists():
+        return None
+
+    try:
+        with open(cache_path) as f:
+            data = json.load(f)
+        return AuthTokens.from_dict(data)
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return None
+
+
+def save_tokens_to_cache(tokens: AuthTokens, silent: bool = False) -> None:
+    """Save tokens to cache."""
+    cache_path = get_cache_path()
+    with open(cache_path, "w") as f:
+        json.dump(tokens.to_dict(), f, indent=2)
+    if not silent:
+        print(f"Auth tokens cached to {cache_path}")
+
+
+def validate_cookies(cookies: dict[str, str]) -> bool:
+    """Check if required cookies are present."""
+    return all(required in cookies for required in REQUIRED_COOKIES)
+
+
+def extract_csrf_from_page_source(html: str) -> str | None:
+    """Extract CSRF token from page HTML."""
+    patterns = [
+        r'"SNlM0e":"([^"]+)"',
+        r'at=([^&"]+)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+    return None
+
+
+def extract_session_id_from_html(html: str) -> str | None:
+    """Extract session ID from page HTML."""
+    patterns = [
+        r'"FdrFJe":"([^"]+)"',
+        r'f\.sid["\s:=]+["\']?(\d+)',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+    return None
