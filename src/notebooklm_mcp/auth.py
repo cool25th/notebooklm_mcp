@@ -75,9 +75,10 @@ async def authenticate(
             print()
             
             # Wait for the main app to load (indicates successful login)
+            # Selectors updated 2025-02: button.create-new-button, mat-card.create-new-action-button, Google account link
             try:
                 await page.wait_for_selector(
-                    '[data-testid="create-notebook-button"], [aria-label="Create notebook"], .notebook-list',
+                    'button.create-new-button, mat-card.create-new-action-button, a[aria-label*="Google 계정"], a[aria-label*="Google Account"]',
                     timeout=timeout * 1000,
                 )
                 print("✅ Login detected!")
