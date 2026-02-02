@@ -26,7 +26,27 @@
 
 ---
 
-## � 설치 가이드 (Step by Step)
+## ⚠️ 설치 전 주의사항
+
+> [!IMPORTANT]
+> **처음 설치하시는 분들은 반드시 읽어주세요!**
+
+1. **Python 3.12 이상** 필수 - 시스템에 Python 3.12 이상이 설치되어 있어야 합니다
+2. **Google 계정** 필요 - NotebookLM에 접근하려면 Google 계정이 필요합니다
+3. **충분한 디스크 공간** - Chromium 브라우저 설치에 약 500MB가 필요합니다
+4. **가상환경 반드시 사용** - 시스템 Python에 직접 설치하지 마세요!
+5. **경로에 한글/공백 금지** - 프로젝트 경로에 한글이나 공백이 포함되면 오류가 발생할 수 있습니다
+
+> [!TIP]
+> macOS에서 Python 3.12가 없다면 [pyenv](https://github.com/pyenv/pyenv)로 설치하는 것을 권장합니다:
+> ```bash
+> brew install pyenv
+> pyenv install 3.12.8
+> ```
+
+---
+
+## 📋 설치 가이드 (Step by Step)
 
 ### Step 1: 저장소 클론
 
@@ -35,14 +55,58 @@ git clone https://github.com/cool25th/notebooklm_mcp.git
 cd notebooklm_mcp
 ```
 
-### Step 2: Python 가상환경 생성
+### Step 2: Python 버전 확인 및 가상환경 생성
+
+#### Python 버전 요구사항
+
+이 프로젝트는 **Python 3.12 이상**이 필요합니다.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+# Python 버전 확인
+python3 --version  # Python 3.12.x 이상 필요
 ```
 
-> 💡 Windows의 경우: `.venv\Scripts\activate`
+#### pyenv를 사용하는 경우 (권장)
+
+[pyenv](https://github.com/pyenv/pyenv)를 사용하면 여러 Python 버전을 쉽게 관리할 수 있습니다.
+
+```bash
+# Python 3.12 설치 (아직 없는 경우)
+pyenv install 3.12.8
+
+# 프로젝트 디렉토리에서 Python 3.12 사용 설정
+pyenv local 3.12.8
+
+# 버전 확인
+python --version  # Python 3.12.8
+```
+
+#### 가상환경 생성 및 활성화
+
+```bash
+# 가상환경 생성
+python3 -m venv .venv
+
+# 가상환경 활성화
+source .venv/bin/activate  # macOS/Linux
+
+# 활성화 확인 (프롬프트에 (.venv) 표시됨)
+which python  # /path/to/notebooklm-mcp/.venv/bin/python
+```
+
+> 💡 **Windows의 경우:**
+> ```powershell
+> .venv\Scripts\activate
+> ```
+
+> ⚠️ **중요:** 이후 모든 명령어는 가상환경이 활성화된 상태에서 실행해야 합니다.
+
+#### 가상환경 비활성화
+
+작업을 마친 후 가상환경을 비활성화하려면:
+```bash
+deactivate
+```
 
 ### Step 3: 패키지 설치
 
@@ -134,6 +198,26 @@ An MCP server that connects [Google NotebookLM](https://notebooklm.google.com/)'
 
 ---
 
+## ⚠️ Before You Start
+
+> [!IMPORTANT]
+> **Please read this if you're installing for the first time!**
+
+1. **Python 3.12+** required - Ensure Python 3.12 or higher is installed on your system
+2. **Google Account** needed - Required to access NotebookLM
+3. **Disk Space** - Chromium browser requires ~500MB
+4. **Use Virtual Environment** - Do NOT install directly to system Python!
+5. **No Spaces/Special Characters in Path** - Avoid spaces or non-ASCII characters in the project path
+
+> [!TIP]
+> If you don't have Python 3.12 on macOS, we recommend using [pyenv](https://github.com/pyenv/pyenv):
+> ```bash
+> brew install pyenv
+> pyenv install 3.12.8
+> ```
+
+---
+
 ## 📋 Installation Guide (Step by Step)
 
 ### Step 1: Clone Repository
@@ -143,14 +227,58 @@ git clone https://github.com/cool25th/notebooklm_mcp.git
 cd notebooklm_mcp
 ```
 
-### Step 2: Create Python Virtual Environment
+### Step 2: Check Python Version & Create Virtual Environment
+
+#### Python Version Requirements
+
+This project requires **Python 3.12 or higher**.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+# Check Python version
+python3 --version  # Python 3.12.x or higher required
 ```
 
-> 💡 On Windows: `.venv\Scripts\activate`
+#### Using pyenv (Recommended)
+
+[pyenv](https://github.com/pyenv/pyenv) makes it easy to manage multiple Python versions.
+
+```bash
+# Install Python 3.12 (if not already installed)
+pyenv install 3.12.8
+
+# Set Python 3.12 for this project directory
+pyenv local 3.12.8
+
+# Verify version
+python --version  # Python 3.12.8
+```
+
+#### Create and Activate Virtual Environment
+
+```bash
+# Create virtual environment
+python3 -m venv .venv
+
+# Activate virtual environment
+source .venv/bin/activate  # macOS/Linux
+
+# Verify activation (prompt should show (.venv))
+which python  # /path/to/notebooklm-mcp/.venv/bin/python
+```
+
+> 💡 **On Windows:**
+> ```powershell
+> .venv\Scripts\activate
+> ```
+
+> ⚠️ **Important:** All subsequent commands must be run with the virtual environment activated.
+
+#### Deactivating Virtual Environment
+
+To deactivate the virtual environment when done:
+```bash
+deactivate
+```
 
 ### Step 3: Install Package
 
