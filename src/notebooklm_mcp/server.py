@@ -215,7 +215,7 @@ async def source_delete(
     if not confirm:
         return {"error": "Deletion requires confirm=True"}
     client = get_client()
-    return await client.delete_source(notebook_id, source_id)
+    return await asyncio.to_thread(client.delete_source, notebook_id, source_id)
 
 
 @mcp.tool()
@@ -230,7 +230,7 @@ async def source_describe(notebook_id: str, source_id: str) -> dict[str, Any]:
         AI-generated summary and keywords.
     """
     client = get_client()
-    return await client.describe_source(notebook_id, source_id)
+    return await asyncio.to_thread(client.get_source_guide, source_id)
 
 
 @mcp.tool()
@@ -245,7 +245,8 @@ async def source_get_content(notebook_id: str, source_id: str) -> dict[str, Any]
         Raw text content of the source.
     """
     client = get_client()
-    return await client.get_source_content(notebook_id, source_id)
+    # get_source_content not implemented yet
+    return {"error": "get_source_content not implemented yet"}
 
 
 # =============================================================================
@@ -264,7 +265,7 @@ async def notebook_query(notebook_id: str, query: str) -> dict[str, Any]:
         AI-generated response based on the notebook sources.
     """
     client = get_client()
-    return await client.query_notebook(notebook_id, query)
+    return await asyncio.to_thread(client.query_notebook, notebook_id, query)
 
 
 @mcp.tool()
@@ -284,7 +285,8 @@ async def chat_configure(
         Updated chat configuration.
     """
     client = get_client()
-    return await client.configure_chat(notebook_id, goal, response_length)
+    # configure_chat not implemented yet
+    return {"error": "configure_chat not implemented yet"}
 
 
 # =============================================================================
@@ -311,7 +313,8 @@ async def studio_create(
         Creation status and artifact ID.
     """
     client = get_client()
-    return await client.create_studio_content(notebook_id, artifact_type, format, difficulty)
+    # create_studio_content not implemented yet
+    return {"error": "create_studio_content not implemented yet"}
 
 
 @mcp.tool()
@@ -326,7 +329,8 @@ async def studio_status(notebook_id: str, artifact_id: str) -> dict[str, Any]:
         Generation status and download URL if complete.
     """
     client = get_client()
-    return await client.get_studio_status(notebook_id, artifact_id)
+    # get_studio_status not implemented yet
+    return {"error": "get_studio_status not implemented yet"}
 
 
 @mcp.tool()
@@ -348,7 +352,8 @@ async def download_artifact(
         Download status and file path.
     """
     client = get_client()
-    return await client.download_artifact(notebook_id, artifact_id, artifact_type, output_path)
+    # download_artifact not implemented yet
+    return {"error": "download_artifact not implemented yet"}
 
 
 # =============================================================================
@@ -372,7 +377,8 @@ async def research_start(
         Research session ID and status.
     """
     client = get_client()
-    return await client.start_research(notebook_id, query, search_type)
+    # start_research not implemented yet
+    return {"error": "start_research not implemented yet"}
 
 
 @mcp.tool()
@@ -387,7 +393,8 @@ async def research_status(notebook_id: str, research_id: str) -> dict[str, Any]:
         Research status and discovered sources.
     """
     client = get_client()
-    return await client.get_research_status(notebook_id, research_id)
+    # get_research_status not implemented yet
+    return {"error": "get_research_status not implemented yet"}
 
 
 @mcp.tool()
@@ -407,7 +414,8 @@ async def research_import(
         Import status.
     """
     client = get_client()
-    return await client.import_research_sources(notebook_id, research_id, source_indices)
+    # import_research_sources not implemented yet
+    return {"error": "import_research_sources not implemented yet"}
 
 
 # =============================================================================
@@ -425,7 +433,8 @@ async def notebook_share_status(notebook_id: str) -> dict[str, Any]:
         Current sharing settings and collaborators.
     """
     client = get_client()
-    return await client.get_share_status(notebook_id)
+    # get_share_status not implemented yet
+    return {"error": "get_share_status not implemented yet"}
 
 
 @mcp.tool()
@@ -440,7 +449,8 @@ async def notebook_share_public(notebook_id: str, enabled: bool) -> dict[str, An
         Updated sharing status and public URL if enabled.
     """
     client = get_client()
-    return await client.set_public_sharing(notebook_id, enabled)
+    # set_public_sharing not implemented yet
+    return {"error": "set_public_sharing not implemented yet"}
 
 
 @mcp.tool()
@@ -460,7 +470,8 @@ async def notebook_share_invite(
         Invitation status.
     """
     client = get_client()
-    return await client.invite_collaborator(notebook_id, email, role)
+    # invite_collaborator not implemented yet
+    return {"error": "invite_collaborator not implemented yet"}
 
 
 # =============================================================================
@@ -475,7 +486,7 @@ async def refresh_auth() -> dict[str, Any]:
         Auth status and token information.
     """
     client = get_client()
-    return await client.refresh_auth()
+    return await asyncio.to_thread(client.refresh_auth)
 
 
 @mcp.tool()
