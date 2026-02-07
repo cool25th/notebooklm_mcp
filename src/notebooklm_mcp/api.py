@@ -387,6 +387,10 @@ class NotebookLMClient:
             f"/notebook/{notebook_id}",
         )
         
+        # Unwrap double-nested list: [[title, sources, id, ...]] -> [title, sources, id, ...]
+        if isinstance(result, list) and len(result) == 1 and isinstance(result[0], list):
+            result = result[0]
+        
         # Parse raw RPC response into structured dict
         if isinstance(result, list) and len(result) >= 3:
             title = result[0] if isinstance(result[0], str) else ""
