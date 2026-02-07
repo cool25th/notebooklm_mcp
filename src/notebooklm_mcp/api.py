@@ -81,6 +81,8 @@ class NotebookLMClient:
     RPC_GET_SUMMARY = "VfAZjd"
     RPC_GET_SOURCE_GUIDE = "tr032e"
     RPC_QUERY = "HdY7pc"  # Query endpoint is different
+    RPC_RESEARCH_START = "QEJOe"  # Web/Drive research initiation
+    RPC_RESEARCH_STATUS = "x7qWae"  # Research progress polling
     
     # Page fetch headers for CSRF extraction
     _PAGE_FETCH_HEADERS = {
@@ -377,13 +379,54 @@ class NotebookLMClient:
         
         return notebooks
     
-    def get_notebook(self, notebook_id: str) -> dict | None:
+    def get_notebook(self, notebook_id: str) -> dict[str, Any]:
         """Get notebook details."""
-        return self._call_rpc(
+        result = self._call_rpc(
             self.RPC_GET_NOTEBOOK,
             [notebook_id, None, [2], None, 0],
             f"/notebook/{notebook_id}",
         )
+        
+        # Parse raw RPC response into structured dict
+        if isinstance(result, list) and len(result) >= 3:
+            title = result[0] if isinstance(result[0], str) else ""
+            nb_id = result[2] if len(result) > 2 else notebook_id
+            
+            # Parse sources
+            sources = []
+            if isinstance(result[1], list):
+                for src in result[1]:
+                    if isinstance(src, list) and len(src) >= 2:
+                        src_id = src[0][0] if isinstance(src[0], list) and src[0] else src[0]
+                        src_title = src[1] if len(src) > 1 else "Untitled"
+                        src_url = ""
+                        if len(src) > 2 and isinstance(src[2], list) and len(src[2]) > 7:
+                            urls = src[2][7]
+                            if isinstance(urls, list) and urls:
+                                src_url = urls[0]
+                        sources.append({"id": src_id, "title": src_title, "url": src_url})
+            
+            # Parse metadata
+            metadata = {}
+            if len(result) > 5 and isinstance(result[5], list):
+                meta = result[5]
+                metadata["is_owned"] = meta[0] == 1 if len(meta) > 0 else True
+                if len(meta) > 5:
+                    metadata["modified_at"] = parse_timestamp(meta[5])
+                if len(meta) > 8:
+                    metadata["created_at"] = parse_timestamp(meta[8])
+            
+            return {
+                "id": nb_id,
+                "title": title,
+                "sources": sources,
+                "source_count": len(sources),
+                **metadata,
+            }
+        
+        if isinstance(result, dict):
+            return result
+        return {"data": result}
     
     def create_notebook(self, name: str, description: str = "") -> dict[str, Any]:
         """Create a new notebook."""
@@ -453,23 +496,15 @@ class NotebookLMClient:
         result = self._call_rpc(self.RPC_ADD_SOURCE, params, f"/notebook/{notebook_id}", timeout=wait_timeout)
         return {"status": "added", "data": result}
     
-    def list_sources(self, notebook_id: str) -> list[dict]:
+    def list_sources(self, notebook_id: str) -> dict[str, Any]:
         """List sources in a notebook."""
         nb = self.get_notebook(notebook_id)
         if not nb:
-            return []
+            return {"sources": [], "count": 0}
         
-        # Sources are typically in the notebook response
-        sources = []
-        if isinstance(nb, list) and len(nb) > 1:
-            sources_data = nb[1] if isinstance(nb[1], list) else []
-            for src in sources_data:
-                if isinstance(src, list) and len(src) >= 2:
-                    src_id = src[0][0] if isinstance(src[0], list) and src[0] else src[0]
-                    src_title = src[1] if len(src) > 1 else "Untitled"
-                    sources.append({"id": src_id, "title": src_title})
-        
-        return sources
+        # get_notebook now returns a dict with parsed sources
+        sources = nb.get("sources", [])
+        return {"sources": sources, "count": len(sources)}
     
     def delete_source(self, notebook_id: str, source_id: str) -> dict[str, Any]:
         """Delete a source from a notebook."""
@@ -507,6 +542,208 @@ class NotebookLMClient:
         }
     
     # =========================================================================
+    # Research Operations
+    # =========================================================================
+    
+    def start_research(
+        self,
+        notebook_id: str,
+        query: str,
+        search_type: str = "web",
+    ) -> dict[str, Any]:
+        """Start web or Drive research to discover sources.
+        
+        Args:
+            notebook_id: The ID of the notebook.
+            query: The research query.
+            search_type: "web" for web search, "drive" for Google Drive search.
+        
+        Returns:
+            Research session ID and initial status.
+        """
+        # search_type mapping: 1 = web, 2 = drive
+        type_map = {"web": 1, "drive": 2}
+        search_type_code = type_map.get(search_type, 1)
+        
+        # Construct research request params
+        # Based on reverse-engineered batchexecute format
+        params = [notebook_id, query, search_type_code]
+        
+        try:
+            result = self._call_rpc(
+                self.RPC_RESEARCH_START,
+                params,
+                f"/notebook/{notebook_id}",
+                timeout=60.0,  # Research may take longer
+            )
+            
+            # Parse research session response
+            if result and isinstance(result, list):
+                research_id = None
+                status = "pending"
+                
+                # Extract research_id from response
+                if len(result) > 0:
+                    research_id = result[0] if isinstance(result[0], str) else str(result[0])
+                
+                if len(result) > 1:
+                    # Status code: 0 = pending, 1 = in_progress, 2 = completed, 3 = failed
+                    status_code = result[1] if isinstance(result[1], int) else 0
+                    status_map = {0: "pending", 1: "in_progress", 2: "completed", 3: "failed"}
+                    status = status_map.get(status_code, "pending")
+                
+                return {
+                    "status": "started",
+                    "research_id": research_id,
+                    "research_status": status,
+                    "search_type": search_type,
+                    "query": query,
+                }
+            
+            return {
+                "status": "started",
+                "research_id": None,
+                "message": "Research initiated but could not parse response",
+                "raw_result": result,
+            }
+            
+        except Exception as e:
+            logger.error(f"Research start failed: {e}")
+            return {"status": "error", "error": str(e)}
+    
+    def get_research_status(
+        self,
+        notebook_id: str,
+        research_id: str,
+    ) -> dict[str, Any]:
+        """Check research progress and get discovered sources.
+        
+        Args:
+            notebook_id: The ID of the notebook.
+            research_id: The ID of the research session.
+        
+        Returns:
+            Research status and list of discovered sources.
+        """
+        params = [notebook_id, research_id]
+        
+        try:
+            result = self._call_rpc(
+                self.RPC_RESEARCH_STATUS,
+                params,
+                f"/notebook/{notebook_id}",
+            )
+            
+            status = "unknown"
+            discovered_sources = []
+            
+            if result and isinstance(result, list):
+                # Extract status
+                if len(result) > 0:
+                    status_code = result[0] if isinstance(result[0], int) else 0
+                    status_map = {0: "pending", 1: "in_progress", 2: "completed", 3: "failed"}
+                    status = status_map.get(status_code, "unknown")
+                
+                # Extract discovered sources
+                if len(result) > 1 and isinstance(result[1], list):
+                    for idx, source_data in enumerate(result[1]):
+                        if isinstance(source_data, list) and len(source_data) >= 2:
+                            source = {
+                                "index": idx,
+                                "url": source_data[0] if source_data[0] else "",
+                                "title": source_data[1] if len(source_data) > 1 else "Untitled",
+                                "summary": source_data[2] if len(source_data) > 2 else "",
+                            }
+                            discovered_sources.append(source)
+            
+            return {
+                "research_id": research_id,
+                "status": status,
+                "discovered_sources": discovered_sources,
+                "source_count": len(discovered_sources),
+            }
+            
+        except Exception as e:
+            logger.error(f"Research status check failed: {e}")
+            return {"status": "error", "error": str(e)}
+    
+    def import_research_sources(
+        self,
+        notebook_id: str,
+        research_id: str,
+        source_indices: list[int] | None = None,
+    ) -> dict[str, Any]:
+        """Import discovered sources from research into the notebook.
+        
+        Args:
+            notebook_id: The ID of the notebook.
+            research_id: The ID of the research session.
+            source_indices: Optional list of source indices to import.
+                          If None, imports all discovered sources.
+        
+        Returns:
+            Import status and details.
+        """
+        # First, get the current research status to know what sources are available
+        status_result = self.get_research_status(notebook_id, research_id)
+        
+        if status_result.get("status") == "error":
+            return status_result
+        
+        if status_result.get("status") != "completed":
+            return {
+                "status": "error",
+                "error": f"Research not completed. Current status: {status_result.get('status')}",
+            }
+        
+        discovered_sources = status_result.get("discovered_sources", [])
+        
+        if not discovered_sources:
+            return {"status": "error", "error": "No sources discovered to import"}
+        
+        # Determine which sources to import
+        if source_indices is None:
+            indices_to_import = list(range(len(discovered_sources)))
+        else:
+            indices_to_import = [i for i in source_indices if 0 <= i < len(discovered_sources)]
+        
+        if not indices_to_import:
+            return {"status": "error", "error": "No valid source indices provided"}
+        
+        imported = []
+        failed = []
+        
+        for idx in indices_to_import:
+            source = discovered_sources[idx]
+            url = source.get("url")
+            
+            if not url:
+                failed.append({"index": idx, "error": "No URL"})
+                continue
+            
+            try:
+                # Use add_source to import the URL
+                result = self.add_source(notebook_id, "url", url=url)
+                if result.get("status") == "added":
+                    imported.append({
+                        "index": idx,
+                        "url": url,
+                        "title": source.get("title", ""),
+                    })
+                else:
+                    failed.append({"index": idx, "error": result.get("error", "Unknown error")})
+            except Exception as e:
+                failed.append({"index": idx, "error": str(e)})
+        
+        return {
+            "status": "completed",
+            "imported_count": len(imported),
+            "failed_count": len(failed),
+            "imported": imported,
+            "failed": failed if failed else None,
+        }
+    
+    # =========================================================================
     # Auth Operations
     # =========================================================================
     
@@ -526,6 +763,67 @@ class NotebookLMClient:
                 "cookies_count": len(self._cookies),
             }
         return {"status": "no_auth_found"}
+    
+    def set_auth(self, cookie_string: str) -> dict[str, Any]:
+        """Set authentication from a cookie string.
+        
+        Args:
+            cookie_string: Browser cookie string (copied from DevTools).
+                          Format: "key1=value1; key2=value2; ..."
+        
+        Returns:
+            Status and number of cookies saved.
+        """
+        import time
+        
+        # Parse cookie string
+        cookies = {}
+        for cookie in cookie_string.split(";"):
+            cookie = cookie.strip()
+            if "=" in cookie:
+                key, value = cookie.split("=", 1)
+                cookies[key.strip()] = value.strip()
+        
+        if not cookies:
+            return {"status": "error", "error": "No cookies parsed from string"}
+        
+        # Check for required cookies
+        required = ["SID", "__Secure-1PSID", "HSID", "SSID", "APISID", "SAPISID"]
+        missing = [c for c in required if c not in cookies]
+        
+        if missing:
+            logger.warning(f"Missing required cookies: {missing}")
+        
+        # Update client state
+        self._cookies = cookies
+        self._csrf_token = ""  # Will be refreshed on next request
+        self._session_id = ""
+        
+        # Reset HTTP client
+        if self._http:
+            self._http.close()
+            self._http = None
+        
+        # Save to disk
+        self._save_auth()
+        
+        # Try to refresh CSRF token
+        try:
+            self._refresh_auth_tokens()
+            return {
+                "status": "success",
+                "cookies_count": len(cookies),
+                "has_csrf_token": bool(self._csrf_token),
+                "has_session_id": bool(self._session_id),
+                "missing_cookies": missing if missing else None,
+            }
+        except Exception as e:
+            return {
+                "status": "partial_success",
+                "cookies_count": len(cookies),
+                "warning": f"Cookies saved but CSRF refresh failed: {e}",
+                "missing_cookies": missing if missing else None,
+            }
     
     def close(self) -> None:
         """Close the HTTP client."""

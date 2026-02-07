@@ -26,8 +26,12 @@ NOTEBOOKLM_URL = "https://notebooklm.google.com/"
 PROFILE_DIR = Path.home() / ".notebooklm-mcp" / "browser-profile"
 
 
-def run_auth_flow() -> AuthTokens | None:
-    """Run the authentication flow using Patchright."""
+def run_auth_flow(fresh: bool = False) -> AuthTokens | None:
+    """Run the authentication flow using Patchright.
+    
+    Args:
+        fresh: If True, clear existing browser profile to force re-login.
+    """
     print("NotebookLM MCP Authentication")
     print("=" * 40)
     print()
@@ -39,11 +43,20 @@ def run_auth_flow() -> AuthTokens | None:
         print("Run: pip install patchright")
         return None
     
+    # Clear browser profile if fresh login requested
+    if fresh and PROFILE_DIR.exists():
+        import shutil
+        print("Clearing existing browser profile for fresh login...")
+        shutil.rmtree(PROFILE_DIR)
+    
     # Ensure profile directory exists
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
     
     print("Launching browser...")
-    print("(Your login will be saved for future use)")
+    if fresh:
+        print("(Fresh login - you will need to enter credentials)")
+    else:
+        print("(Your login will be saved for future use)")
     print()
     
     with sync_playwright() as p:
@@ -62,7 +75,7 @@ def run_auth_flow() -> AuthTokens | None:
         
         # Navigate to NotebookLM
         print("Navigating to NotebookLM...")
-        page.goto(NOTEBOOKLM_URL, wait_until="networkidle", timeout=30000)
+        page.goto(NOTEBOOKLM_URL, wait_until="domcontentloaded", timeout=60000)
         
         # Check if logged in
         current_url = page.url
@@ -219,19 +232,22 @@ def main():
         epilog="""
 Examples:
   notebooklm-mcp-auth              # Opens browser for login
+  notebooklm-mcp-auth --fresh      # Clear session and re-login
   notebooklm-mcp-auth --file       # Import cookies from file
   notebooklm-mcp-auth --file ~/cookies.txt
         """
     )
     parser.add_argument("--file", nargs="?", const="", metavar="PATH",
                         help="Import cookies from file instead of browser")
+    parser.add_argument("--fresh", action="store_true",
+                        help="Clear existing session and force re-login")
     
     args = parser.parse_args()
     
     if args.file is not None:
         run_file_mode(args.file if args.file else None)
     else:
-        run_auth_flow()
+        run_auth_flow(fresh=args.fresh)
 
 
 if __name__ == "__main__":

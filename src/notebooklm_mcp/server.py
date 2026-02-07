@@ -91,7 +91,28 @@ async def notebook_get(notebook_id: str) -> dict[str, Any]:
         Notebook details including sources and metadata.
     """
     client = get_client()
-    return await asyncio.to_thread(client.get_notebook, notebook_id)
+    result = await asyncio.to_thread(client.get_notebook, notebook_id)
+    if isinstance(result, dict):
+        return result
+    
+    # Parse raw RPC response into structured dict
+    if isinstance(result, list) and len(result) >= 3:
+        title = result[0] if isinstance(result[0], str) else ""
+        notebook_id_val = result[2] if len(result) > 2 else notebook_id
+        sources = []
+        if isinstance(result[1], list):
+            for src in result[1]:
+                if isinstance(src, list) and len(src) >= 2:
+                    src_id = src[0][0] if isinstance(src[0], list) and src[0] else src[0]
+                    src_title = src[1] if len(src) > 1 else "Untitled"
+                    sources.append({"id": src_id, "title": src_title})
+        return {
+            "id": notebook_id_val,
+            "title": title,
+            "sources": sources,
+            "source_count": len(sources),
+        }
+    return {"data": result}
 
 
 @mcp.tool()
@@ -195,7 +216,12 @@ async def source_list(notebook_id: str) -> dict[str, Any]:
         List of sources with metadata and freshness information.
     """
     client = get_client()
-    return await asyncio.to_thread(client.list_sources, notebook_id)
+    result = await asyncio.to_thread(client.list_sources, notebook_id)
+    if isinstance(result, dict):
+        return result
+    # Wrap list result in dict
+    sources = result if isinstance(result, list) else []
+    return {"sources": sources, "count": len(sources)}
 
 
 @mcp.tool()
@@ -377,8 +403,12 @@ async def research_start(
         Research session ID and status.
     """
     client = get_client()
-    # start_research not implemented yet
-    return {"error": "start_research not implemented yet"}
+    return await asyncio.to_thread(
+        client.start_research,
+        notebook_id=notebook_id,
+        query=query,
+        search_type=search_type,
+    )
 
 
 @mcp.tool()
@@ -393,8 +423,11 @@ async def research_status(notebook_id: str, research_id: str) -> dict[str, Any]:
         Research status and discovered sources.
     """
     client = get_client()
-    # get_research_status not implemented yet
-    return {"error": "get_research_status not implemented yet"}
+    return await asyncio.to_thread(
+        client.get_research_status,
+        notebook_id=notebook_id,
+        research_id=research_id,
+    )
 
 
 @mcp.tool()
@@ -414,8 +447,12 @@ async def research_import(
         Import status.
     """
     client = get_client()
-    # import_research_sources not implemented yet
-    return {"error": "import_research_sources not implemented yet"}
+    return await asyncio.to_thread(
+        client.import_research_sources,
+        notebook_id=notebook_id,
+        research_id=research_id,
+        source_indices=source_indices,
+    )
 
 
 # =============================================================================
@@ -490,6 +527,28 @@ async def refresh_auth() -> dict[str, Any]:
 
 
 @mcp.tool()
+async def reauth(cookie_string: str) -> dict[str, Any]:
+    """Re-authenticate with a new cookie string.
+    
+    Use this to change Google accounts or fix authentication issues.
+    
+    How to get the cookie string:
+    1. Open Chrome and go to: https://notebooklm.google.com
+    2. Press F12 to open DevTools
+    3. Go to Application tab → Cookies → notebooklm.google.com
+    4. Copy all cookies or use Network tab to copy Cookie header
+    
+    Args:
+        cookie_string: Browser cookie string (Format: "key1=value1; key2=value2; ...")
+    
+    Returns:
+        Authentication status and cookie count.
+    """
+    client = get_client()
+    return await asyncio.to_thread(client.set_auth, cookie_string)
+
+
+@mcp.tool()
 async def server_info() -> dict[str, Any]:
     """Get server version and status.
     
@@ -497,11 +556,22 @@ async def server_info() -> dict[str, Any]:
         Server version, status, and available tools.
     """
     from . import __version__
+    import inspect
+    
+    tools_count = 25  # fallback
+    try:
+        result = mcp.get_tools()
+        if inspect.isawaitable(result):
+            result = await result
+        tools_count = len(result)
+    except Exception:
+        pass
+    
     return {
         "name": "antigravity-notebooklm-mcp",
         "version": __version__,
         "description": "NotebookLM MCP Server for Antigravity IDE",
-        "tools_count": len(mcp.get_tools()),
+        "tools_count": tools_count,
         "status": "running",
     }
 

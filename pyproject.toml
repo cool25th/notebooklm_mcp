@@ -14,6 +14,7 @@ dependencies = [
 [project.scripts]
 notebooklm-mcp = "notebooklm_mcp.server:main"
 notebooklm-mcp-auth = "notebooklm_mcp.auth_cli:main"
+notebooklm-mcp-discover = "notebooklm_mcp.rpc_discovery:main"
 
 [build-system]
 requires = ["hatchling"]
